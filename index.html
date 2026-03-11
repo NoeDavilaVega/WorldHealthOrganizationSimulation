@@ -1,1 +1,475 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Cure Simulator</title>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f4f4;
+text-align:center;
+}
+
+canvas{
+border:1px solid black;
+background:white;
+margin-top:10px;
+}
+
+.tabs button{
+padding:8px 14px;
+margin:5px;
+cursor:pointer;
+}
+
+.tab{
+display:none;
+}
+
+.tab.active{
+display:block;
+}
+
+.initiative{
+border:1px solid #ccc;
+background:white;
+padding:10px;
+margin:8px;
+display:inline-block;
+width:200px;
+}
+
+button{
+padding:6px 10px;
+margin:5px;
+cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<h2>Global Cure Simulator</h2>
+
+<!-- LOADOUT SCREEN -->
+
+<div id="loadout">
+
+<h3>Select Difficulty</h3>
+
+<button onclick="startGame('easy')">Easy</button>
+<button onclick="startGame('medium')">Medium</button>
+<button onclick="startGame('hard')">Hard</button>
+
+<p>
+Easy: High starting budget, low interest<br>
+Medium: Moderate starting budget<br>
+Hard: Very limited starting budget
+</p>
+
+</div>
+
+
+<!-- MAIN GAME -->
+
+<div id="game" style="display:none;">
+
+<div class="tabs">
+<button onclick="showTab('sim')">Simulation</button>
+<button onclick="showTab('graph')">Graph</button>
+<button onclick="showTab('budgetTab')">Budget</button>
+</div>
+
+
+<!-- SIMULATION TAB -->
+
+<div id="sim" class="tab active">
+
+<canvas id="simCanvas" width="900" height="500"></canvas>
+
+<br><br>
+
+<button onclick="runTurn()">Next Turn</button>
+
+<br><br>
+
+Turn: <span id="turn">0</span>
+
+<br>
+
+Infected: <span id="infected">0</span>
+
+<br>
+
+Cured: <span id="cured">0</span>
+
+<br>
+
+Cure Rate (b): <span id="cureRateDisplay">0</span>
+
+<div id="status"></div>
+
+</div>
+
+
+<!-- GRAPH TAB -->
+
+<div id="graph" class="tab">
+
+<canvas id="graphCanvas" width="900" height="500"></canvas>
+
+</div>
+
+
+<!-- BUDGET TAB -->
+
+<div id="budgetTab" class="tab">
+
+<h3>Budget</h3>
+
+Budget: $<span id="budgetDisplay">0</span>
+
+<br><br>
+
+<div id="initiativeContainer"></div>
+
+</div>
+
+</div>
+
+
+<script>
+
+let canvas=document.getElementById("simCanvas")
+let ctx=canvas.getContext("2d")
+
+let people=[]
+let chart
+
+let population=600
+let moveSpeed=1
+
+let turnCount=0
+
+let cureRate=0.02
+
+let budget=0
+let interestRate=0
+
+const stepsPerTurn=200
+
+let initiatives=[
+
+{
+name:"Distribute Medicine",
+cost:200000,
+effect:0.03,
+purchased:false
+},
+
+{
+name:"Information Campaign",
+cost:300000,
+effect:0.02,
+purchased:false
+},
+
+{
+name:"Expand Hospitals",
+cost:800000,
+effect:0.05,
+purchased:false
+},
+
+{
+name:"Rapid Testing",
+cost:1200000,
+effect:0.06,
+purchased:false
+},
+
+{
+name:"Create Vaccine",
+cost:2000000,
+effect:0.15,
+purchased:false
+}
+
+]
+
+
+function startGame(mode){
+
+document.getElementById("loadout").style.display="none"
+document.getElementById("game").style.display="block"
+
+if(mode==="easy"){
+budget=5000000
+interestRate=0.05
+}
+
+if(mode==="medium"){
+budget=2000000
+interestRate=0.10
+}
+
+if(mode==="hard"){
+budget=800000
+interestRate=0.20
+}
+
+resetSimulation()
+renderInitiatives()
+
+}
+
+function showTab(id){
+
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"))
+
+document.getElementById(id).classList.add("active")
+
+if(id==="graph" && chart){
+chart.update()
+}
+
+}
+
+
+function resetSimulation(){
+
+people=[]
+
+turnCount=0
+
+for(let i=0;i<population;i++){
+
+people.push({
+x:Math.random()*canvas.width,
+y:Math.random()*canvas.height,
+cured:false
+})
+
+}
+
+initGraph()
+
+draw()
+
+updateStats()
+
+}
+
+
+function step(){
+
+for(let p of people){
+
+p.x+=(Math.random()-0.5)*moveSpeed*4
+p.y+=(Math.random()-0.5)*moveSpeed*4
+
+p.x=Math.max(0,Math.min(canvas.width,p.x))
+p.y=Math.max(0,Math.min(canvas.height,p.y))
+
+}
+
+}
+
+
+function applyCures(){
+
+let infected=people.filter(p=>!p.cured)
+
+let cures=Math.floor(infected.length*cureRate)
+
+for(let i=0;i<cures;i++){
+
+let target=infected[Math.floor(Math.random()*infected.length)]
+
+target.cured=true
+
+}
+
+}
+
+
+function runTurn(){
+
+for(let i=0;i<stepsPerTurn;i++){
+step()
+}
+
+applyCures()
+
+budget=Math.floor(budget*(1+interestRate))
+
+turnCount++
+
+draw()
+updateStats()
+updateGraph()
+
+if(people.every(p=>p.cured)){
+
+status.innerText="All people cured! Victory!"
+
+}
+
+}
+
+
+function draw(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height)
+
+for(let p of people){
+
+ctx.beginPath()
+ctx.arc(p.x,p.y,3,0,Math.PI*2)
+
+if(p.cured)
+ctx.fillStyle="green"
+else
+ctx.fillStyle="red"
+
+ctx.fill()
+ctx.stroke()
+
+}
+
+}
+
+
+function updateStats(){
+
+let infectedCount=people.filter(p=>!p.cured).length
+let curedCount=people.filter(p=>p.cured).length
+
+document.getElementById("turn").innerText=turnCount
+document.getElementById("infected").innerText=infectedCount
+document.getElementById("cured").innerText=curedCount
+
+document.getElementById("cureRateDisplay").innerText=cureRate.toFixed(3)
+
+document.getElementById("budgetDisplay").innerText=budget.toLocaleString()
+
+}
+
+
+function renderInitiatives(){
+
+let container=document.getElementById("initiativeContainer")
+
+container.innerHTML=""
+
+initiatives.forEach((i,index)=>{
+
+let div=document.createElement("div")
+div.className="initiative"
+
+div.innerHTML=`
+
+<b>${i.name}</b>
+
+<br><br>
+
+Cost: $${i.cost.toLocaleString()}
+
+<br>
+
+Effect: +${i.effect}
+
+<br><br>
+
+<button onclick="buyInitiative(${index})" ${i.purchased?"disabled":""}>
+${i.purchased?"Purchased":"Purchase"}
+</button>
+
+`
+
+container.appendChild(div)
+
+})
+
+}
+
+
+function buyInitiative(i){
+
+let item=initiatives[i]
+
+if(item.purchased) return
+
+if(budget>=item.cost){
+
+budget-=item.cost
+
+cureRate+=item.effect
+
+item.purchased=true
+
+renderInitiatives()
+
+updateStats()
+
+}
+
+}
+
+
+function initGraph(){
+
+if(chart) chart.destroy()
+
+let ctx2=document.getElementById("graphCanvas")
+
+chart=new Chart(ctx2,{
+type:"line",
+data:{
+labels:[0],
+datasets:[
+{
+label:"Infected",
+borderColor:"red",
+data:[population]
+},
+{
+label:"Cured",
+borderColor:"green",
+data:[0]
+}
+]
+},
+options:{animation:false}
+})
+
+}
+
+
+function updateGraph(){
+
+let t=turnCount
+
+chart.data.labels.push(t)
+
+let infected=people.filter(p=>!p.cured).length
+let cured=people.filter(p=>p.cured).length
+
+chart.data.datasets[0].data.push(infected)
+chart.data.datasets[1].data.push(cured)
+
+chart.update()
+
+}
+
+</script>
+
+</body>
+</html>
+```
