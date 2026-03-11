@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Cure Simulator</title>
+<title>Global Cure Simulator</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -26,13 +26,8 @@ margin:5px;
 cursor:pointer;
 }
 
-.tab{
-display:none;
-}
-
-.tab.active{
-display:block;
-}
+.tab{display:none;}
+.tab.active{display:block;}
 
 .initiative{
 border:1px solid #ccc;
@@ -40,13 +35,47 @@ background:white;
 padding:10px;
 margin:8px;
 display:inline-block;
-width:200px;
+width:230px;
+vertical-align:top;
 }
 
 button{
 padding:6px 10px;
 margin:5px;
 cursor:pointer;
+}
+
+#repContainer{
+display:inline-block;
+height:200px;
+width:30px;
+border:1px solid black;
+background:#ddd;
+position:relative;
+margin-left:20px;
+}
+
+#repBar{
+position:absolute;
+bottom:0;
+width:100%;
+background:green;
+height:100%;
+}
+
+.flavor{
+font-size:12px;
+color:#555;
+margin-top:6px;
+}
+
+.instructions{
+width:700px;
+margin:auto;
+text-align:left;
+background:white;
+border:1px solid #ccc;
+padding:15px;
 }
 
 </style>
@@ -56,9 +85,54 @@ cursor:pointer;
 
 <h2>Global Cure Simulator</h2>
 
-<!-- LOADOUT SCREEN -->
+<!-- START SCREEN -->
 
 <div id="loadout">
+
+<div class="instructions">
+
+<h3>Game Overview</h3>
+
+<p>
+You are the leader of a global health organization attempting to cure a disease
+spreading across the entire population. At the start of the game everyone is infected.
+Each turn your organization cures a percentage of the remaining infected population.
+</p>
+
+<p>
+This simulation demonstrates <b>exponential decay</b>.
+If the cure rate is <b>b</b>, then each turn the infected population becomes:
+</p>
+
+<p>
+<b>I(t+1) = I(t) × (1 − b)</b>
+</p>
+
+<p>
+Increasing the cure rate causes the infected population to shrink faster.
+You can purchase initiatives to improve treatment capacity, increase funding,
+or manage public perception.
+</p>
+
+<p>
+<b>Important systems:</b>
+</p>
+
+<ul>
+<li><b>Budget</b> grows each turn through interest.</li>
+<li><b>Initiatives</b> modify cure rate, funding, or reputation.</li>
+<li><b>Reputation</b> decreases when many people remain infected.</li>
+<li>If reputation reaches <b>0</b>, the organization collapses.</li>
+<li>If the infected population reaches <b>0</b>, you win.</li>
+</ul>
+
+<p>
+Watch the graph to see how your decisions affect the exponential decay curve.
+</p>
+
+</div>
+
+<br>
 
 <h3>Select Difficulty</h3>
 
@@ -67,15 +141,14 @@ cursor:pointer;
 <button onclick="startGame('hard')">Hard</button>
 
 <p>
-Easy: High starting budget, low interest<br>
+Easy: Large starting budget<br>
 Medium: Moderate starting budget<br>
-Hard: Very limited starting budget
+Hard: Limited funds but higher interest growth
 </p>
 
 </div>
 
-
-<!-- MAIN GAME -->
+<!-- GAME AREA -->
 
 <div id="game" style="display:none;">
 
@@ -85,7 +158,6 @@ Hard: Very limited starting budget
 <button onclick="showTab('budgetTab')">Budget</button>
 </div>
 
-
 <!-- SIMULATION TAB -->
 
 <div id="sim" class="tab active">
@@ -94,7 +166,7 @@ Hard: Very limited starting budget
 
 <br><br>
 
-<button onclick="runTurn()">Next Turn</button>
+<button id="turnButton" onclick="runTurn()">Next Turn</button>
 
 <br><br>
 
@@ -102,20 +174,34 @@ Turn: <span id="turn">0</span>
 
 <br>
 
+Money: $<span id="money">0</span>
+
+<br>
+
+Cure Rate: <span id="cureRateDisplay">0</span>
+
+<br><br>
+
 Infected: <span id="infected">0</span>
 
 <br>
 
-Cured: <span id="cured">0</span>
+Healthy: <span id="healthy">0</span>
+
+<br><br>
+
+Reputation
+
+<div id="repContainer">
+<div id="repBar"></div>
+</div>
 
 <br>
-
-Cure Rate (b): <span id="cureRateDisplay">0</span>
+<span id="repValue"></span>
 
 <div id="status"></div>
 
 </div>
-
 
 <!-- GRAPH TAB -->
 
@@ -125,12 +211,11 @@ Cure Rate (b): <span id="cureRateDisplay">0</span>
 
 </div>
 
-
 <!-- BUDGET TAB -->
 
 <div id="budgetTab" class="tab">
 
-<h3>Budget</h3>
+<h3>Initiatives</h3>
 
 Budget: $<span id="budgetDisplay">0</span>
 
@@ -142,7 +227,6 @@ Budget: $<span id="budgetDisplay">0</span>
 
 </div>
 
-
 <script>
 
 let canvas=document.getElementById("simCanvas")
@@ -152,56 +236,87 @@ let people=[]
 let chart
 
 let population=600
-let moveSpeed=1
 
 let turnCount=0
 
-let cureRate=0.02
+let cureRate=0.03
 
 let budget=0
-let interestRate=0
+let interestRate=0.05
 
-const stepsPerTurn=200
+let reputation=100
+
+let running=false
+
+const stepsPerTurn=50
+const turnDuration=1000
 
 let initiatives=[
 
 {
 name:"Distribute Medicine",
 cost:200000,
+type:"cure",
 effect:0.03,
-purchased:false
-},
-
-{
-name:"Information Campaign",
-cost:300000,
-effect:0.02,
+flavor:"Emergency medicine shipments reduce symptoms and accelerate recovery.",
 purchased:false
 },
 
 {
 name:"Expand Hospitals",
 cost:800000,
+type:"cure",
 effect:0.05,
-purchased:false
-},
-
-{
-name:"Rapid Testing",
-cost:1200000,
-effect:0.06,
+flavor:"Temporary treatment centers allow more patients to receive care simultaneously.",
 purchased:false
 },
 
 {
 name:"Create Vaccine",
 cost:2000000,
+type:"cure",
 effect:0.15,
+flavor:"A breakthrough vaccine dramatically increases the rate of recovery.",
+purchased:false
+},
+
+{
+name:"PR Firm",
+cost:300000,
+type:"repBonus",
+flavor:"A professional public relations firm helps maintain public trust.",
+purchased:false
+},
+
+{
+name:"Publicity Campaign",
+cost:250000,
+type:"repBoost",
+value:10,
+flavor:"Advertisements and media outreach restore confidence in the organization.",
+purchased:false
+},
+
+{
+name:"Long Term Bonds",
+cost:500000,
+type:"interestUp",
+value:0.03,
+flavor:"Government-backed bonds increase long-term financial growth.",
+purchased:false
+},
+
+{
+name:"Emergency Loan",
+cost:0,
+type:"loan",
+money:1000000,
+interestPenalty:0.02,
+flavor:"Immediate funding, but debt obligations reduce future growth.",
 purchased:false
 }
 
 ]
-
 
 function startGame(mode){
 
@@ -240,12 +355,11 @@ chart.update()
 
 }
 
-
 function resetSimulation(){
 
 people=[]
-
 turnCount=0
+reputation=100
 
 for(let i=0;i<population;i++){
 
@@ -258,20 +372,17 @@ cured:false
 }
 
 initGraph()
-
 draw()
-
 updateStats()
 
 }
 
-
-function step(){
+function movePeople(){
 
 for(let p of people){
 
-p.x+=(Math.random()-0.5)*moveSpeed*4
-p.y+=(Math.random()-0.5)*moveSpeed*4
+p.x+=(Math.random()-0.5)*4
+p.y+=(Math.random()-0.5)*4
 
 p.x=Math.max(0,Math.min(canvas.width,p.x))
 p.y=Math.max(0,Math.min(canvas.height,p.y))
@@ -279,7 +390,6 @@ p.y=Math.max(0,Math.min(canvas.height,p.y))
 }
 
 }
-
 
 function applyCures(){
 
@@ -297,31 +407,76 @@ target.cured=true
 
 }
 
-
 function runTurn(){
 
-for(let i=0;i<stepsPerTurn;i++){
-step()
+if(running) return
+
+running=true
+
+disableButtons(true)
+
+let start=Date.now()
+
+function animate(){
+
+movePeople()
+draw()
+
+if(Date.now()-start < turnDuration){
+
+requestAnimationFrame(animate)
+
+}else{
+
+finishTurn()
+
+running=false
+
+disableButtons(false)
+
 }
 
+}
+
+animate()
+
+}
+
+function finishTurn(){
+
 applyCures()
+
+let infected=people.filter(p=>!p.cured).length
+let infectedPercent=(infected/population)*100
+
+let repLoss=infectedPercent/10
+
+reputation-=repLoss
 
 budget=Math.floor(budget*(1+interestRate))
 
 turnCount++
 
-draw()
-updateStats()
 updateGraph()
+updateStats()
 
-if(people.every(p=>p.cured)){
+if(reputation<=0){
 
-status.innerText="All people cured! Victory!"
+status.innerText="Reputation collapsed. You lost."
+
+disableButtons(true)
+
+}
+
+if(infected===0){
+
+status.innerText="All citizens cured. Victory."
+
+disableButtons(true)
 
 }
 
 }
-
 
 function draw(){
 
@@ -332,10 +487,7 @@ for(let p of people){
 ctx.beginPath()
 ctx.arc(p.x,p.y,3,0,Math.PI*2)
 
-if(p.cured)
-ctx.fillStyle="green"
-else
-ctx.fillStyle="red"
+ctx.fillStyle=p.cured ? "green":"red"
 
 ctx.fill()
 ctx.stroke()
@@ -344,22 +496,41 @@ ctx.stroke()
 
 }
 
-
 function updateStats(){
 
-let infectedCount=people.filter(p=>!p.cured).length
-let curedCount=people.filter(p=>p.cured).length
+let infected=people.filter(p=>!p.cured).length
+let healthy=population-infected
 
 document.getElementById("turn").innerText=turnCount
-document.getElementById("infected").innerText=infectedCount
-document.getElementById("cured").innerText=curedCount
+document.getElementById("infected").innerText=infected
+document.getElementById("healthy").innerText=healthy
 
 document.getElementById("cureRateDisplay").innerText=cureRate.toFixed(3)
 
+document.getElementById("money").innerText=budget.toLocaleString()
 document.getElementById("budgetDisplay").innerText=budget.toLocaleString()
+
+document.getElementById("repValue").innerText=reputation.toFixed(1)
+
+let pct=reputation
+
+document.getElementById("repBar").style.height=pct+"%"
 
 }
 
+function disableButtons(state){
+
+document.querySelectorAll("button").forEach(b=>{
+
+if(b.id!=="turnButton"){
+b.disabled=state
+}
+
+})
+
+document.getElementById("turnButton").disabled=state
+
+}
 
 function renderInitiatives(){
 
@@ -369,12 +540,20 @@ container.innerHTML=""
 
 initiatives.forEach((i,index)=>{
 
+let desc=""
+
+if(i.type==="cure") desc="Increase cure rate by "+i.effect
+if(i.type==="repBonus") desc="Reduces reputation loss each turn"
+if(i.type==="repBoost") desc="Instant reputation +"+i.value
+if(i.type==="interestUp") desc="Increase interest rate by "+(i.value*100)+"%"
+if(i.type==="loan") desc="Receive $"+i.money.toLocaleString()+" but reduce interest growth"
+
 let div=document.createElement("div")
 div.className="initiative"
 
 div.innerHTML=`
 
-<b>${i.name}</b>
+<b title="${i.flavor}">${i.name}</b>
 
 <br><br>
 
@@ -382,9 +561,11 @@ Cost: $${i.cost.toLocaleString()}
 
 <br>
 
-Effect: +${i.effect}
+${desc}
 
-<br><br>
+<div class="flavor">${i.flavor}</div>
+
+<br>
 
 <button onclick="buyInitiative(${index})" ${i.purchased?"disabled":""}>
 ${i.purchased?"Purchased":"Purchase"}
@@ -398,7 +579,6 @@ container.appendChild(div)
 
 }
 
-
 function buyInitiative(i){
 
 let item=initiatives[i]
@@ -409,18 +589,31 @@ if(budget>=item.cost){
 
 budget-=item.cost
 
+if(item.type==="cure"){
 cureRate+=item.effect
+}
+
+if(item.type==="repBoost"){
+reputation=Math.min(100,reputation+item.value)
+}
+
+if(item.type==="interestUp"){
+interestRate+=item.value
+}
+
+if(item.type==="loan"){
+budget+=item.money
+interestRate-=item.interestPenalty
+}
 
 item.purchased=true
 
 renderInitiatives()
-
 updateStats()
 
 }
 
 }
-
 
 function initGraph(){
 
@@ -439,29 +632,29 @@ borderColor:"red",
 data:[population]
 },
 {
-label:"Cured",
+label:"Healthy",
 borderColor:"green",
 data:[0]
 }
 ]
 },
-options:{animation:false}
+options:{
+animation:false,
+responsive:false
+}
 })
 
 }
 
-
 function updateGraph(){
 
-let t=turnCount
-
-chart.data.labels.push(t)
-
 let infected=people.filter(p=>!p.cured).length
-let cured=people.filter(p=>p.cured).length
+let healthy=population-infected
+
+chart.data.labels.push(turnCount)
 
 chart.data.datasets[0].data.push(infected)
-chart.data.datasets[1].data.push(cured)
+chart.data.datasets[1].data.push(healthy)
 
 chart.update()
 
